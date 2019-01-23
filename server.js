@@ -18,7 +18,7 @@ class Server {
             this.broadcastUsers();
             break;
           case 'offer':
-            this.handleRequestConnection(msg);
+            this.handleOffer(msg);
             break;
           case 'answer':
             this.handleAnswer(msg);
@@ -28,6 +28,12 @@ class Server {
             break;
           case 'requestUsers':
             this.handleUsersRequest(msg);
+            break;
+          case 'callRequest':
+            this.handleCallRequest(msg);
+            break;
+          case 'callAnswer':
+            this.handleCallAnswer(msg);
             break;
           default:
             console.log(`Message of type: ${msg.type} not handled.`);
@@ -79,8 +85,8 @@ class Server {
     this.users[msg.name] = ws;
   }
 
-  handleRequestConnection(msg) {
-    console.log(`${msg.name} has called ${msg.dest}`);
+  handleOffer(msg) {
+    console.log(`${msg.name} has rpc-offered ${msg.dest}`);
     if (msg.dest in this.users) {
       this.users[msg.dest].send(JSON.stringify({
         type: msg.type,
@@ -91,7 +97,29 @@ class Server {
   }
 
   handleAnswer(msg) {
-    console.log(`${msg.dest} has been answered`);
+    console.log(`${msg.dest} has rpc-answered`);
+    if (msg.dest in this.users) {
+      this.users[msg.dest].send(JSON.stringify({
+        type: msg.type,
+        sdp: msg.sdp,
+        name: msg.name,
+      }));
+    }
+  }
+
+  handleCallRequest(msg) {
+    console.log(`${msg.name} has called ${msg.dest}`);
+    if (msg.dest in this.users) {
+      this.users[msg.dest].send(JSON.stringify({
+        type: msg.type,
+        sdp: msg.sdp,
+        name: msg.name,
+      }));
+    }
+  }
+
+  handleCallAnswer(msg) {
+    console.log(`${msg.name} has been answered by ${msg.dest}`);
     if (msg.dest in this.users) {
       this.users[msg.dest].send(JSON.stringify({
         type: msg.type,

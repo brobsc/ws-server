@@ -14,25 +14,24 @@ class Server {
         }
         switch (msg.type) {
           case 'signin':
-            this.handleUserConnection(msg, ws);
-            this.broadcastUsers();
+            this.handleSignin(msg, ws);
             break;
-          case 'offer':
+          case 'rpc-offer':
             this.handleOffer(msg);
             break;
-          case 'answer':
+          case 'rpc-answer':
             this.handleAnswer(msg);
             break;
-          case 'newCandidate':
-            this.handleNewIceCandidate(msg);
+          case 'ice-candidate':
+            this.handleIceCandidate(msg);
             break;
-          case 'requestUsers':
+          case 'user-list-request':
             this.handleUsersRequest(msg);
             break;
-          case 'callRequest':
+          case 'call-request':
             this.handleCallRequest(msg);
             break;
-          case 'callAnswer':
+          case 'call-answer':
             this.handleCallAnswer(msg);
             break;
           default:
@@ -50,86 +49,66 @@ class Server {
   }
 
   handleUsersRequest(msg) {
-    const requester = msg.name;
-    const users = Object.keys(this.users);
-    console.log(`${requester} has requested online users`)
-    this.users[requester].send(JSON.stringify({
-      type: 'userList',
-      users: users,
-    }));
+    const to = msg.from;
+    console.log(`${to} has requested online users`)
+    this.sendUserList(to);
   }
 
   broadcastUsers() {
-    const users = Object.keys(this.users);
-    console.log(`Broadcasting userList to ${users.length} users.`)
+    console.log(`Broadcasting userList to ${this.wss.clients.size} users.`)
     this.wss.clients.forEach((client) => {
-      console.log(`Sending users to ${Object.keys(this.users).find(u => this.users[u] === client)}`)
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: 'userList',
-          users: users,
-        }));
-      }
+      const to = Object.keys(this.users).find(u => this.users[u] === client);
+      this.sendUserList(to);
     });
   }
 
-  handleNewIceCandidate(msg) {
-    console.log(`${msg.name} has sent candidate to ${msg.dest}`);
-    if (msg.dest in this.users) {
-      this.users[msg.dest].send(JSON.stringify(msg));
-    }
+  sendUserList(to) {
+    const users = Object.keys(this.users);
+    console.log(`Sending user list to ${to}`)
+    this.sendMessageToUser('user-list-update', 'server', to, users);
   }
 
-  handleUserConnection(msg, ws) {
-    console.log(`${msg.name} has connected`);
-    this.users[msg.name] = ws;
+  handleIceCandidate(msg) {
+    console.log(`${msg.from} has sent candidate to ${msg.to}`);
+    this.sendMessageToUser('ice-candidate-received', msg.from, msg.to, msg.data);
+  }
+
+  handleSignin(msg, ws) {
+    console.log(`${msg.from} has connected`);
+    this.users[msg.from] = ws;
+    this.broadcastUsers();
   }
 
   handleOffer(msg) {
-    console.log(`${msg.name} has rpc-offered ${msg.dest}`);
-    if (msg.dest in this.users) {
-      this.users[msg.dest].send(JSON.stringify({
-        type: msg.type,
-        sdp: msg.sdp,
-        name: msg.name,
-      }));
-    }
+    console.log(`${msg.from} has rpc-offered ${msg.to}`);
+    this.sendMessageToUser(msg.type, msg.from, msg.to, msg.data);
   }
 
   handleAnswer(msg) {
-    console.log(`${msg.dest} has rpc-answered`);
-    if (msg.dest in this.users) {
-      this.users[msg.dest].send(JSON.stringify({
-        type: msg.type,
-        sdp: msg.sdp,
-        name: msg.name,
-      }));
-    }
+    console.log(`${msg.to} has rpc-answered`);
+    this.sendMessageToUser(msg.type, msg.from, msg.to, msg.data);
   }
 
   handleCallRequest(msg) {
-    console.log(`${msg.name} has called ${msg.dest}`);
-    if (msg.dest in this.users) {
-      this.users[msg.dest].send(JSON.stringify({
-        type: msg.type,
-        sdp: msg.sdp,
-        name: msg.name,
-      }));
-    }
+    console.log(`${msg.from} has called ${msg.to}`);
+    this.sendMessageToUser(msg.type, msg.from, msg.to, msg.data);
   }
 
   handleCallAnswer(msg) {
-    console.log(`${msg.name} has been answered by ${msg.dest}`);
-    if (msg.dest in this.users) {
-      this.users[msg.dest].send(JSON.stringify({
-        type: msg.type,
-        sdp: msg.sdp,
-        name: msg.name,
-      }));
+    console.log(`${msg.from} has been answered by ${msg.to}`);
+    this.sendMessageToUser(msg.type, msg.from, msg.to, msg.data);
+  }
+
+  sendMessageToUser(type, from, to, data) {
+    const msg = JSON.stringify({type, id: from, data});
+    if (to in this.users) {
+      this.users[to].send(msg);
     }
   }
 }
 
+const port = 8090;
 new Server(8090);
+console.log(`Server listening on ${port}`)
 
 module.exports.Server = Server;
